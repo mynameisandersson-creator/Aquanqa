@@ -34,3 +34,10 @@ npm install
 npm run server
 npm run dev
 ```
+
+
+## Deploy (Railway)
+- Start command recomendado: `npm run railway:start`
+- Scripts incluidos:
+  - `npm run start`
+  - `npm run railway:start`
