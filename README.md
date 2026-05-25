@@ -194,3 +194,9 @@ En `POST /api/attendance/scan`:
    - `GET /api/admin/photo-rules`
    - `POST /api/admin/employees` (con `idPhoto`)
    - `POST /api/attendance/scan` (con `employeeIdentity` + `faceImage`)
+
+
+## 14) Inicio automático de schema en deploy
+- `npm run railway:start` ahora ejecuta `init-db.js` antes del servidor.
+- `init-db.js` aplica `db/schema.sql` en MySQL usando `DATABASE_URL`.
+- Esto evita errores por tablas faltantes al iniciar el backend.

@@ -7,46 +7,36 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 async function initDatabase() {
-  const connection = await mysql.createConnection({
-    host: process.env.MYSQLHOST,
-    user: process.env.MYSQLUSER,
-    password: process.env.MYSQLPASSWORD,
-    database: process.env.MYSQLDATABASE,
-    port: Number(process.env.MYSQLPORT) || 3306,
-    multipleStatements: true,
-  })
+  const connectionUri = process.env.DATABASE_URL || process.env.MYSQL_URL
+  if (!connectionUri) {
+    console.error('✖ No se encontró DATABASE_URL ni MYSQL_URL')
+    process.exit(1)
+  }
 
-  console.log('✔ Conectado a MySQL. Ejecutando schema...')
-
+  console.log('→ Conectando a MySQL...')
+  const connection = await mysql.createConnection({ uri: connectionUri })
   const schemaPath = path.join(__dirname, 'db', 'schema.sql')
   const sql = fs.readFileSync(schemaPath, 'utf8')
 
-  // Split on semicolons, filter empty statements, run each one individually
-  // so errors on already-existing objects are caught per-statement.
   const statements = sql
     .split(';')
     .map((s) => s.trim())
-    .filter((s) => s.length > 0)
+    .filter(Boolean)
 
   for (const statement of statements) {
     try {
-      await connection.execute(statement)
+      await connection.query(statement)
     } catch (err) {
-      // ER_TABLE_EXISTS_ERROR, ER_DUP_KEYNAME, etc. — safe to ignore
-      if (err.code && (err.code.startsWith('ER_TABLE_EXISTS') || err.code === 'ER_DUP_KEYNAME')) {
-        console.warn(`⚠ Ignorado (ya existe): ${err.code}`)
-      } else {
-        console.error(`✖ Error ejecutando sentencia:\n${statement}\n`, err.message)
-        // Non-fatal: log and continue so remaining statements still run
+      const ignorable = ['ER_TABLE_EXISTS_ERROR', 'ER_DUP_KEYNAME', 'ER_DUP_ENTRY']
+      if (!ignorable.includes(err.code)) {
+        console.error('✖ Error ejecutando statement:', err.message)
+        throw err
       }
     }
   }
 
   await connection.end()
-  console.log('✔ Schema aplicado correctamente. Base de datos lista.')
+  console.log('✔ Base de datos inicializada')
 }
 
-initDatabase().catch((err) => {
-  console.error('✖ Error fatal al inicializar la base de datos:', err.message)
-  process.exit(1)
-})
+initDatabase().then(() => process.exit(0)).catch(() => process.exit(1))
