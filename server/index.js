@@ -2,6 +2,7 @@ import express from 'express'
 import cors from 'cors'
 import multer from 'multer'
 import path from 'path'
+import fs from 'fs'
 import { fileURLToPath } from 'url'
 import { pool } from './db.js'
 
@@ -10,10 +11,20 @@ const port = process.env.PORT || 4000
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
+const rootDir = path.join(__dirname, '..')
+const publicDir = path.join(rootDir, 'public')
+
+const ensureDir = (dir) => {
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+}
+
+ensureDir(path.join(rootDir, 'uploads/faces'))
+ensureDir(path.join(rootDir, 'uploads/videos'))
+
 const storage = multer.diskStorage({
   destination(req, file, cb) {
-    const folder = file.fieldname === 'video' ? '../uploads/videos' : '../uploads/faces'
-    cb(null, path.join(__dirname, folder))
+    const folder = file.fieldname === 'video' ? 'uploads/videos' : 'uploads/faces'
+    cb(null, path.join(rootDir, folder))
   },
   filename(req, file, cb) {
     cb(null, `${Date.now()}-${file.originalname.replace(/\s+/g, '-')}`)
@@ -24,7 +35,8 @@ const upload = multer({ storage })
 
 app.use(cors())
 app.use(express.json())
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')))
+app.use('/uploads', express.static(path.join(rootDir, 'uploads')))
+app.use(express.static(publicDir))
 
 app.get('/api/health', (_, res) => res.json({ ok: true }))
 
@@ -32,7 +44,8 @@ app.post('/api/attendance/scan', upload.fields([{ name: 'faceImage', maxCount: 1
   try {
     const { employeeCode, method = 'face', confidence = 97.3, biometricMatch = 'true' } = req.body
     if (!employeeCode) return res.status(400).json({ ok: false, message: 'employeeCode es requerido' })
-    if (!['face','fingerprint'].includes(method)) return res.status(400).json({ ok: false, message: 'Método inválido' })
+    if (!['face', 'fingerprint'].includes(method)) return res.status(400).json({ ok: false, message: 'Método inválido' })
+
     const employeeResult = await pool.query(
       'SELECT id, full_name, area, id_photo_url FROM employees WHERE employee_code = $1 AND active = true LIMIT 1',
       [employeeCode],
@@ -85,6 +98,25 @@ app.post('/api/attendance/scan', upload.fields([{ name: 'faceImage', maxCount: 1
 app.get('/api/reports/attendance', async (_, res) => {
   const data = await pool.query('SELECT * FROM attendance_report ORDER BY scan_time DESC LIMIT 200')
   res.json({ ok: true, data: data.rows })
+})
+
+app.get('/', (_, res) => {
+  const html = `<!doctype html>
+<html lang="es">
+  <head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>Aquanqa API</title></head>
+  <body style="font-family:Arial;background:#071223;color:#fff;padding:24px;">
+    <h1>Aquanqa Attendance API</h1>
+    <p>Servidor activo. Usa <code>/api/health</code> para verificar estado.</p>
+  </body>
+</html>`
+  res.status(200).send(html)
+})
+
+app.use((req, res) => {
+  if (req.path.startsWith('/api/')) {
+    return res.status(404).json({ ok: false, message: `Ruta no encontrada: ${req.path}` })
+  }
+  return res.redirect('/')
 })
 
 app.listen(port, () => {
