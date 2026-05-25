@@ -37,7 +37,7 @@ npm run dev
 
 
 ## Deploy (Railway)
-- Start command recomendado: `npm run railway:start`
+- Start command recomendado: `npm run start`
 - Scripts incluidos:
   - `npm run start`
   - `npm run railway:start`
@@ -63,3 +63,39 @@ Si Railway muestra logs como **"npm ERR! missing script: railway:start"**, signi
 ### Notas
 - Si solo quieres backend sin build de Vite, usa start command: `npm run start`.
 - Para evitar incompatibilidades de runtime, se incluye `.nvmrc` con Node `20`.
+
+
+## Ver frontend (React) y backend (API)
+### URLs del aplicativo desplegado
+- Frontend (React): `https://TU-DOMINIO-RAILWAY/`
+- Health API: `https://TU-DOMINIO-RAILWAY/api/health`
+- Reporte API: `https://TU-DOMINIO-RAILWAY/api/reports/attendance`
+
+### Importante
+- Si en `/` solo ves "Aquanqa Attendance API", entonces Railway está corriendo backend pero **no encontró `dist/`**.
+- Con `railway:start` (`npm run build && node server/index.js`) se genera `dist` y el servidor ahora sirve React en `/` automáticamente.
+
+
+### Railway recomendado (más estable)
+- Build command: `npm run build`
+- Start command: `npm run start`
+- Esto evita compilar en cada arranque del contenedor y reduce reinicios.
+
+
+## Función principal del aplicativo
+La función principal es registrar asistencia en segundos:
+1. **Escanear** (📷): abre cámara, captura foto y video corto.
+2. **Confirmar** (🪪): valida identidad del trabajador.
+3. **Registrar** (✅): guarda asistencia y evidencia en PostgreSQL.
+
+## Estructura React (direcciones)
+- App principal: `src/App.jsx`
+- Entrada React: `src/main.jsx`
+- Estilos globales: `src/styles.css`
+- Config Tailwind: `tailwind.config.js`
+
+## Seguimiento visual (navbar de pasos)
+Se implementó una barra de progreso con iconos en la parte superior del móvil:
+- 📷 Escanear
+- 🪪 Confirmar
+- ✅ Registrar

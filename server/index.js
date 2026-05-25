@@ -12,19 +12,21 @@ const port = process.env.PORT || 4000
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const rootDir = path.join(__dirname, '..')
+const uploadsDir = path.join(rootDir, 'uploads')
+const distDir = path.join(rootDir, 'dist')
 const publicDir = path.join(rootDir, 'public')
 
 const ensureDir = (dir) => {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
 }
 
-ensureDir(path.join(rootDir, 'uploads/faces'))
-ensureDir(path.join(rootDir, 'uploads/videos'))
+ensureDir(path.join(uploadsDir, 'faces'))
+ensureDir(path.join(uploadsDir, 'videos'))
 
 const storage = multer.diskStorage({
   destination(req, file, cb) {
-    const folder = file.fieldname === 'video' ? 'uploads/videos' : 'uploads/faces'
-    cb(null, path.join(rootDir, folder))
+    const folder = file.fieldname === 'video' ? 'videos' : 'faces'
+    cb(null, path.join(uploadsDir, folder))
   },
   filename(req, file, cb) {
     cb(null, `${Date.now()}-${file.originalname.replace(/\s+/g, '-')}`)
@@ -35,8 +37,7 @@ const upload = multer({ storage })
 
 app.use(cors())
 app.use(express.json())
-app.use('/uploads', express.static(path.join(rootDir, 'uploads')))
-app.use(express.static(publicDir))
+app.use('/uploads', express.static(uploadsDir))
 
 app.get('/api/health', (_, res) => res.json({ ok: true }))
 
@@ -100,25 +101,27 @@ app.get('/api/reports/attendance', async (_, res) => {
   res.json({ ok: true, data: data.rows })
 })
 
-app.get('/', (_, res) => {
-  const html = `<!doctype html>
-<html lang="es">
-  <head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>Aquanqa API</title></head>
-  <body style="font-family:Arial;background:#071223;color:#fff;padding:24px;">
-    <h1>Aquanqa Attendance API</h1>
-    <p>Servidor activo. Usa <code>/api/health</code> para verificar estado.</p>
-  </body>
-</html>`
-  res.status(200).send(html)
-})
-
-app.use((req, res) => {
-  if (req.path.startsWith('/api/')) {
-    return res.status(404).json({ ok: false, message: `Ruta no encontrada: ${req.path}` })
-  }
-  return res.redirect('/')
-})
+const hasDist = fs.existsSync(path.join(distDir, 'index.html'))
+if (hasDist) {
+  app.use(express.static(distDir))
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api/')) return next()
+    return res.sendFile(path.join(distDir, 'index.html'))
+  })
+} else {
+  app.use(express.static(publicDir))
+  app.get('/', (_, res) => {
+    res.status(200).sendFile(path.join(publicDir, 'index.html'))
+  })
+  app.get('*', (req, res) => {
+    if (req.path.startsWith('/api/')) {
+      return res.status(404).json({ ok: false, message: `Ruta no encontrada: ${req.path}` })
+    }
+    return res.redirect('/')
+  })
+}
 
 app.listen(port, () => {
   console.log(`Aquanqa API listening on port ${port}`)
+  console.log(hasDist ? 'Serving React frontend from /dist' : 'Serving API landing page from /public')
 })
