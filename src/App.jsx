@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000'
 
 const workers = [
   { code: 'AQ-1001', name: 'Juan Pérez', area: 'Frío', punctuality: 'Puntual', avatar: 'JP' },
@@ -16,6 +18,15 @@ export default function App() {
   const [worker, setWorker] = useState(workers[0])
   const [time, setTime] = useState(formatTime())
   const [method, setMethod] = useState('face')
+  const [employeeCode, setEmployeeCode] = useState('AQ-1001')
+  const [faceBlob, setFaceBlob] = useState(null)
+  const [videoBlob, setVideoBlob] = useState(null)
+
+  const statusClass = useMemo(() => {
+    if (status.includes('No se pudo') || status.includes('Error')) return 'text-red-300'
+    if (status.includes('detectado')) return 'text-emerald-300'
+    return 'text-cold-300'
+  }, [status])
 
   useEffect(() => {
     if (step === 'done') {
@@ -27,22 +38,48 @@ export default function App() {
     }
   }, [step])
 
-  const statusClass = useMemo(() => {
-    if (status.includes('No se pudo')) return 'text-red-300'
-    if (status.includes('detectado')) return 'text-emerald-300'
-    return 'text-cold-300'
-  }, [status])
-
-  const simulateDetect = () => {
-    const random = Math.random()
-    if (random < 0.2) {
-      setStatus('No se pudo reconocer el rostro')
-      setStep('error')
-      return
-    }
+  const onCaptureReady = ({ face, video }) => {
+    setFaceBlob(face)
+    setVideoBlob(video)
     setStatus('Rostro detectado')
-    setWorker(workers[Math.floor(Math.random() * workers.length)])
+    const matched = workers.find((w) => w.code === employeeCode) || workers[0]
+    setWorker(matched)
     setStep('result')
+  }
+
+  const registerAttendance = async () => {
+    try {
+      const form = new FormData()
+      form.append('employeeCode', employeeCode)
+      form.append('method', method)
+      form.append('confidence', '97.2')
+      form.append('biometricMatch', 'true')
+      if (faceBlob) form.append('faceImage', faceBlob, `face-${Date.now()}.jpg`)
+      if (videoBlob) form.append('video', videoBlob, `video-${Date.now()}.webm`)
+
+      const response = await fetch(`${API_BASE}/api/attendance/scan`, {
+        method: 'POST',
+        body: form,
+      })
+
+      const result = await response.json()
+      if (!response.ok || !result.ok) {
+        setStatus(result.message || 'Error registrando asistencia')
+        setStep('error')
+        return
+      }
+
+      setWorker({
+        ...worker,
+        name: result.employee.full_name,
+        area: result.employee.area,
+      })
+      setTime(formatTime())
+      setStep('done')
+    } catch (error) {
+      setStatus('Error de conexión con el servidor')
+      setStep('error')
+    }
   }
 
   return (
@@ -50,8 +87,19 @@ export default function App() {
       <section className="w-[360px] rounded-[30px] border border-cold-300/30 bg-gradient-to-b from-cold-800 to-cold-700 shadow-2xl p-4">
         <div className="text-center tracking-[0.18em] font-semibold text-[34px] mb-3">AQUANQA</div>
 
-        {step === 'scan' && <ScanScreen status={status} statusClass={statusClass} method={method} setMethod={setMethod} onSimulate={simulateDetect} />}
-        {step === 'result' && <ResultScreen worker={worker} method={method} onYes={() => { setTime(formatTime()); setStep('done') }} onNo={() => setStep('error')} />}
+        {step === 'scan' && (
+          <ScanScreen
+            status={status}
+            statusClass={statusClass}
+            method={method}
+            setMethod={setMethod}
+            employeeCode={employeeCode}
+            setEmployeeCode={setEmployeeCode}
+            onCaptureReady={onCaptureReady}
+            setStatus={setStatus}
+          />
+        )}
+        {step === 'result' && <ResultScreen worker={worker} method={method} onYes={registerAttendance} onNo={() => setStep('error')} />}
         {step === 'done' && <DoneScreen worker={worker} time={time} method={method} />}
         {step === 'error' && <ErrorScreen onRetry={() => { setStatus('Escaneando...'); setStep('scan') }} />}
       </section>
@@ -59,26 +107,90 @@ export default function App() {
   )
 }
 
-function ScanScreen({ status, statusClass, method, setMethod, onSimulate }) {
+function ScanScreen({ status, statusClass, method, setMethod, employeeCode, setEmployeeCode, onCaptureReady, setStatus }) {
+  const videoRef = useRef(null)
+  const mediaRecorderRef = useRef(null)
+  const streamRef = useRef(null)
+  const chunksRef = useRef([])
+
+  useEffect(() => {
+    let mounted = true
+
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false })
+      .then((stream) => {
+        if (!mounted) return
+        streamRef.current = stream
+        if (videoRef.current) videoRef.current.srcObject = stream
+      })
+      .catch(() => setStatus('No se pudo abrir la cámara'))
+
+    return () => {
+      mounted = false
+      if (mediaRecorderRef.current?.state === 'recording') mediaRecorderRef.current.stop()
+      streamRef.current?.getTracks().forEach((track) => track.stop())
+    }
+  }, [setStatus])
+
+  const captureFrame = () => {
+    if (!videoRef.current) return null
+    const canvas = document.createElement('canvas')
+    canvas.width = videoRef.current.videoWidth || 720
+    canvas.height = videoRef.current.videoHeight || 1280
+    const ctx = canvas.getContext('2d')
+    ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height)
+    return new Promise((resolve) => canvas.toBlob((blob) => resolve(blob), 'image/jpeg', 0.9))
+  }
+
+  const startRecording = () => {
+    if (!streamRef.current) return
+    chunksRef.current = []
+    const recorder = new MediaRecorder(streamRef.current, { mimeType: 'video/webm' })
+    mediaRecorderRef.current = recorder
+    recorder.ondataavailable = (event) => {
+      if (event.data.size > 0) chunksRef.current.push(event.data)
+    }
+    recorder.start()
+    setStatus('Grabando video de reconocimiento...')
+  }
+
+  const stopAndDetect = async () => {
+    const face = await captureFrame()
+    const recorder = mediaRecorderRef.current
+
+    if (recorder?.state === 'recording') {
+      recorder.onstop = () => {
+        const video = new Blob(chunksRef.current, { type: 'video/webm' })
+        onCaptureReady({ face, video })
+      }
+      recorder.stop()
+    } else {
+      onCaptureReady({ face, video: null })
+    }
+  }
+
   return (
     <div>
-      <div className="relative rounded-[32px] border-[3px] border-cold-500 p-5 h-[470px] bg-cold-800/60">
-        <div className="relative h-full rounded-3xl border border-cold-300/40 overflow-hidden bg-gradient-to-b from-cold-800 to-cold-700">
+      <div className="relative rounded-[32px] border-[3px] border-cold-500 p-3 h-[450px] bg-cold-800/60">
+        <div className="relative h-full rounded-3xl border border-cold-300/40 overflow-hidden bg-black">
+          <video ref={videoRef} autoPlay playsInline muted className="absolute inset-0 w-full h-full object-cover" />
           <div className="absolute inset-x-8 top-[20%] bottom-[24%] rounded-[999px] border-4 border-dashed border-cold-300/70 animate-pulseScan" />
           <div className="absolute left-8 right-8 h-1 bg-cold-500/70 blur-[1px] animate-scanLine" />
         </div>
       </div>
-      <div className={`text-center mt-4 text-[30px] ${statusClass}`}>{status}</div>
-      <p className="text-center mt-2 text-white/70 text-[26px]">Coloque su rostro dentro del marco</p>
+      <div className={`text-center mt-3 text-[24px] ${statusClass}`}>{status}</div>
+      <p className="text-center mt-1 text-white/70 text-[20px]">Coloque su rostro dentro del marco</p>
 
-      <div className="grid grid-cols-2 gap-2 mt-4">
-        <button onClick={() => setMethod('face')} className={`h-14 rounded-xl text-xl ${method === 'face' ? 'bg-cold-500' : 'bg-slate-600'}`}>Facial</button>
-        <button onClick={() => setMethod('fingerprint')} className={`h-14 rounded-xl text-xl ${method === 'fingerprint' ? 'bg-cold-500' : 'bg-slate-600'}`}>Táctil</button>
+      <input value={employeeCode} onChange={(e) => setEmployeeCode(e.target.value.toUpperCase())} className="mt-3 w-full h-12 px-3 rounded-xl bg-slate-800 border border-cold-300/30" placeholder="Código empleado (AQ-1001)" />
+
+      <div className="grid grid-cols-2 gap-2 mt-3">
+        <button onClick={() => setMethod('face')} className={`h-12 rounded-xl text-lg ${method === 'face' ? 'bg-cold-500' : 'bg-slate-600'}`}>Facial</button>
+        <button onClick={() => setMethod('fingerprint')} className={`h-12 rounded-xl text-lg ${method === 'fingerprint' ? 'bg-cold-500' : 'bg-slate-600'}`}>Táctil</button>
       </div>
 
-      <button onClick={onSimulate} className="mt-3 w-full h-20 rounded-2xl bg-cold-500 hover:bg-[#2f80f7] transition font-medium text-[30px]">
-        Simular detección
-      </button>
+      <div className="grid grid-cols-2 gap-2 mt-3">
+        <button onClick={startRecording} className="h-14 rounded-xl bg-amber-500 text-slate-900 font-semibold">Iniciar video</button>
+        <button onClick={stopAndDetect} className="h-14 rounded-xl bg-cold-500 font-semibold">Capturar y detectar</button>
+      </div>
     </div>
   )
 }

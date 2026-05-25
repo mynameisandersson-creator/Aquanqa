@@ -31,6 +31,8 @@ app.get('/api/health', (_, res) => res.json({ ok: true }))
 app.post('/api/attendance/scan', upload.fields([{ name: 'faceImage', maxCount: 1 }, { name: 'video', maxCount: 1 }]), async (req, res) => {
   try {
     const { employeeCode, method = 'face', confidence = 97.3, biometricMatch = 'true' } = req.body
+    if (!employeeCode) return res.status(400).json({ ok: false, message: 'employeeCode es requerido' })
+    if (!['face','fingerprint'].includes(method)) return res.status(400).json({ ok: false, message: 'Método inválido' })
     const employeeResult = await pool.query(
       'SELECT id, full_name, area, id_photo_url FROM employees WHERE employee_code = $1 AND active = true LIMIT 1',
       [employeeCode],
