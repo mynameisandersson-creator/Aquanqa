@@ -99,3 +99,25 @@ Se implementó una barra de progreso con iconos en la parte superior del móvil:
 - 📷 Escanear
 - 🪪 Confirmar
 - ✅ Registrar
+
+
+## Roles y perfiles
+- **Empleado (asistencia):** usa terminal de escaneo para marcar asistencia con cámara/foto/video.
+- **Administrador:** gestiona usuarios, empleados y cargas de foto de identificación para comparación biométrica.
+
+## Nuevas tablas de base de datos
+- `app_users`: usuarios del sistema con rol (`admin`, `employee`).
+- `employees`: empleados vinculables a usuario, con foto ID y templates biométricos.
+- `biometric_enrollments`: historial de enrolamiento de biometría (facial/táctil).
+- `attendance_records` + `recognition_evidence`: asistencia y evidencia (foto/video + comparación).
+
+## Endpoints administrativos (admin)
+Usar header: `x-user-role: admin`
+- `POST /api/admin/users`
+- `POST /api/admin/employees` (multipart con `idPhoto`)
+- `GET /api/admin/employees`
+
+## Flujo de comparación biométrica
+1. Admin sube foto ID del empleado y datos base.
+2. Empleado marca asistencia con webcam (foto + video).
+3. API guarda evidencia y referencia la foto de identificación para comparación.
