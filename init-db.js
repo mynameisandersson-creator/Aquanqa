@@ -7,16 +7,21 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 async function initDatabase() {
+  const connectionUri = process.env.DATABASE_URL || process.env.MYSQL_URL
+
+  if (!connectionUri) {
+    console.error('✖ Error fatal: DATABASE_URL o MYSQL_URL no están definidas.')
+    process.exit(1)
+  }
+
+  console.log('→ Conectando a MySQL...')
+
   const connection = await mysql.createConnection({
-    host: process.env.MYSQLHOST,
-    user: process.env.MYSQLUSER,
-    password: process.env.MYSQLPASSWORD,
-    database: process.env.MYSQLDATABASE,
-    port: Number(process.env.MYSQLPORT) || 3306,
+    uri: connectionUri,
     multipleStatements: true,
   })
 
-  console.log('✔ Conectado a MySQL. Ejecutando schema...')
+  console.log('✔ Conectado.')
 
   const schemaPath = path.join(__dirname, 'db', 'schema.sql')
   const sql = fs.readFileSync(schemaPath, 'utf8')
@@ -43,7 +48,8 @@ async function initDatabase() {
   }
 
   await connection.end()
-  console.log('✔ Schema aplicado correctamente. Base de datos lista.')
+  console.log('✔ Schema aplicado.')
+  process.exit(0)
 }
 
 initDatabase().catch((err) => {
