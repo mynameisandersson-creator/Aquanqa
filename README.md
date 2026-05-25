@@ -200,3 +200,26 @@ En `POST /api/attendance/scan`:
 - `npm run railway:start` ahora ejecuta `init-db.js` antes del servidor.
 - `init-db.js` aplica `db/schema.sql` en MySQL usando `DATABASE_URL`.
 - Esto evita errores por tablas faltantes al iniciar el backend.
+
+
+## 15) Post-deploy MySQL (Railway)
+Después de cada deploy, ejecutar esta verificación rápida:
+
+1. **Health backend**
+   - `GET /api/health` debe responder `{ "ok": true }`.
+2. **Reglas biométricas**
+   - `GET /api/admin/photo-rules` debe listar `DEFAULT_NO_ACCESSORIES`.
+3. **Tablas creadas** (en consola SQL Railway)
+   - `SHOW TABLES;`
+   - validar: `app_users`, `employees`, `photo_rules`, `biometric_enrollments`, `attendance_records`, `recognition_evidence`.
+4. **Vista de reportes**
+   - `SELECT * FROM attendance_report LIMIT 5;`
+5. **Prueba funcional mínima**
+   - registrar 1 empleado con `idPhoto`
+   - registrar 1 asistencia con `faceImage`
+   - verificar resultado en `GET /api/reports/attendance`.
+
+### Errores comunes y solución
+- **`Table ... doesn't exist`**: validar que `npm run railway:start` esté activo y ejecute `init-db.js` antes de `server/index.js`.
+- **`Access denied` MySQL**: revisar `DATABASE_URL` del servicio web.
+- **Deploy exitoso pero sin datos**: correr `db/schema.sql` manualmente en Database Console y redeploy.
