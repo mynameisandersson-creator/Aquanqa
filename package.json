@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "server": "node server/index.js",
     "start": "node server/index.js",
-    "railway:start": "npm run build && node server/index.js"
+    "railway:start": "npm run build && node init-db.js && node server/index.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
