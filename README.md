@@ -1,134 +1,163 @@
 # Aquanqa Attendance Terminal
 
-Terminal móvil de asistencia para Aquanqa (frío y despacho), con captura por **cámara web** y registro en **PostgreSQL** usando **Node + Express (JavaScript)**.
+Aplicativo full-stack para marcación de asistencia en entorno de frío/dispatch con captura por webcam, validación biométrica (facial/táctil), evidencia de imagen/video y persistencia en PostgreSQL.
 
-## Frontend
-- React + Tailwind
-- Flujo rápido: escaneo -> confirmación -> registro -> auto-reset
-- Cámara web en vivo
-- Captura de foto facial
-- Grabación corta de video de reconocimiento
-- Método de marcación: facial o táctil
+---
 
-## Backend (Node + Express + PostgreSQL)
+## 1) Arquitectura general
+
+- **Frontend:** React + Vite + Tailwind (`src/`)
+- **Backend:** Node.js + Express (`server/`)
+- **Base de datos:** PostgreSQL (`db/schema.sql`)
+- **Storage local:** `uploads/` (fotos ID, capturas faciales, videos)
+- **Deploy:** Railway (`railway.json`, `.nvmrc`)
+
+---
+
+## 2) Credenciales administrativas (predefinidas en UI)
+
+En el panel Admin del frontend:
+
+- **Usuario admin:** `admin.aquanqa`
+- **Clave admin:** `Aquanqa@2026!`
+
+Además se exige captcha tipo imagen para ingresar al panel administrativo.
+
+> Nota: estas credenciales están definidas para pruebas. En producción se recomienda moverlas a backend + variables seguras.
+
+---
+
+## 3) Funcionalidad principal
+
+### Panel Asistencia (Empleado)
+
+Flujo:
+1. Selección de panel `👷 Panel Asistencia`.
+2. Activación de cámara.
+3. Ingreso de identidad: **ID empleado o nombre completo**.
+4. Selección de método:
+   - `👤 Facial`
+   - `🖐 Táctil` (auto-seleccionado en móvil)
+5. Resolución de captcha anti-bot.
+6. Detección (`➡ Detectar`) y confirmación.
+7. Registro de asistencia en BD.
+
+### Panel Admin (Administrativo)
+
+Flujo:
+1. Selección de panel `🛠 Panel Admin`.
+2. Login admin (usuario + clave + captcha imagen).
+3. Registro de empleado con foto de identificación.
+4. Consulta visual de datos:
+   - tabla de empleados
+   - tabla de asistencias
+   - visualización de foto ID
+
+---
+
+## 4) Endpoints API
+
+### Salud
+- `GET /api/health`
+
+### Asistencia
 - `POST /api/attendance/scan`
-  - valida `employeeCode`
-  - recibe `faceImage` y `video`
-  - registra asistencia y evidencia biométrica
-- `GET /api/reports/attendance` devuelve informe empresarial
-- `GET /api/health` estado del API
+  - Acepta `employeeCode` o `employeeIdentity`
+  - Acepta `method` (`face` | `fingerprint`)
+  - Acepta `faceImage` (multipart)
+  - Guarda asistencia + evidencia + referencia foto ID
 
-## Base de datos
-- Archivo: `db/schema.sql`
-- Tablas: `employees`, `attendance_records`, `recognition_evidence`
-- Vista: `attendance_report`
+### Administración
+- `POST /api/admin/users` *(si se usa backend admin completo)*
+- `POST /api/admin/employees` *(multipart con `idPhoto`)*
+- `GET /api/admin/employees`
 
-## Variables de entorno
+### Reportes
+- `GET /api/reports/attendance`
+
+---
+
+## 5) Base de datos (tablas)
+
+Definidas en `db/schema.sql`:
+
+- `app_users`
+- `employees`
+- `attendance_records`
+- `recognition_evidence`
+- `biometric_enrollments`
+- vista: `attendance_report`
+
+Relación clave:
+- `employees` ↔ `attendance_records`
+- `attendance_records` ↔ `recognition_evidence`
+- `app_users` puede vincularse con `employees` y enrolamientos
+
+---
+
+## 6) Estructura del proyecto
+
+- `src/App.jsx` → UI principal (Panel Asistencia + Panel Admin)
+- `src/main.jsx` → entrada React
+- `src/styles.css` → estilos base
+- `server/index.js` → API Express + estáticos
+- `server/db.js` → pool PostgreSQL
+- `db/schema.sql` → esquema relacional
+- `uploads/` → evidencia local
+- `railway.json` → build/start deploy
+
+---
+
+## 7) Variables de entorno
+
 - `DATABASE_URL=postgres://user:pass@host:5432/aquanqa`
 - `PORT=4000`
 - `VITE_API_BASE=http://localhost:4000`
 
-## Ejecutar
+---
+
+## 8) Ejecución local
+
 ```bash
 npm install
-npm run server
+npm run build
+npm run start
+```
+
+Para desarrollo frontend:
+
+```bash
 npm run dev
 ```
 
+---
 
-## Deploy (Railway)
-- Start command recomendado: `npm run start`
-- Scripts incluidos:
-  - `npm run start`
-  - `npm run railway:start`
+## 9) Deploy Railway
 
+Configuración recomendada:
+- **Build command:** `npm run build`
+- **Start command:** `npm run start`
 
-## Solución de crash en Railway (`Missing railway:start script`)
-Si Railway muestra logs como **"npm ERR! missing script: railway:start"**, significa que el servicio intentó ejecutar un comando de inicio que no existía.
+Verificación post deploy:
+- `/` → frontend React
+- `/api/health` → `{ "ok": true }`
+- `/api/reports/attendance` → datos de asistencia
 
-### Qué se corrigió
-- Se agregó en `package.json`:
-  - `"start": "node server/index.js"`
-  - `"railway:start": "npm run build && node server/index.js"`
-- Se agregó `railway.json` para forzar el start command correcto: `npm run railway:start`.
+---
 
-### Checklist de despliegue
-1. Mergear el branch con estos cambios a `main`.
-2. En Railway, confirmar variable `DATABASE_URL`.
-3. Redeploy manual (o esperar auto-deploy).
-4. Verificar:
-   - `/api/health` -> `{ "ok": true }`
-   - `/` -> página "Aquanqa Attendance API"
+## 10) Proceso de registro biométrico (resumen)
 
-### Notas
-- Si solo quieres backend sin build de Vite, usa start command: `npm run start`.
-- Para evitar incompatibilidades de runtime, se incluye `.nvmrc` con Node `20`.
+1. Admin registra empleado y sube foto ID.
+2. Empleado marca asistencia en terminal con cámara.
+3. API registra coincidencia (score/match), evidencia capturada y hora.
+4. Reportes consultables desde endpoint y panel admin visual.
 
+---
 
-## Ver frontend (React) y backend (API)
-### URLs del aplicativo desplegado
-- Frontend (React): `https://TU-DOMINIO-RAILWAY/`
-- Health API: `https://TU-DOMINIO-RAILWAY/api/health`
-- Reporte API: `https://TU-DOMINIO-RAILWAY/api/reports/attendance`
+## 11) Seguridad y mejoras recomendadas
 
-### Importante
-- Si en `/` solo ves "Aquanqa Attendance API", entonces Railway está corriendo backend pero **no encontró `dist/`**.
-- Con `railway:start` (`npm run build && node server/index.js`) se genera `dist` y el servidor ahora sirve React en `/` automáticamente.
-
-
-### Railway recomendado (más estable)
-- Build command: `npm run build`
-- Start command: `npm run start`
-- Esto evita compilar en cada arranque del contenedor y reduce reinicios.
-
-
-## Función principal del aplicativo
-La función principal es registrar asistencia en segundos:
-1. **Escanear** (📷): abre cámara, captura foto y video corto.
-2. **Confirmar** (🪪): valida identidad del trabajador.
-3. **Registrar** (✅): guarda asistencia y evidencia en PostgreSQL.
-
-## Estructura React (direcciones)
-- App principal: `src/App.jsx`
-- Entrada React: `src/main.jsx`
-- Estilos globales: `src/styles.css`
-- Config Tailwind: `tailwind.config.js`
-
-## Seguimiento visual (navbar de pasos)
-Se implementó una barra de progreso con iconos en la parte superior del móvil:
-- 📷 Escanear
-- 🪪 Confirmar
-- ✅ Registrar
-
-
-## Roles y perfiles
-- **Empleado (asistencia):** usa terminal de escaneo para marcar asistencia con cámara/foto/video.
-- **Administrador:** gestiona usuarios, empleados y cargas de foto de identificación para comparación biométrica.
-
-## Nuevas tablas de base de datos
-- `app_users`: usuarios del sistema con rol (`admin`, `employee`).
-- `employees`: empleados vinculables a usuario, con foto ID y templates biométricos.
-- `biometric_enrollments`: historial de enrolamiento de biometría (facial/táctil).
-- `attendance_records` + `recognition_evidence`: asistencia y evidencia (foto/video + comparación).
-
-## Endpoints administrativos (admin)
-Usar header: `x-user-role: admin`
-- `POST /api/admin/users`
-- `POST /api/admin/employees` (multipart con `idPhoto`)
-- `GET /api/admin/employees`
-
-## Flujo de comparación biométrica
-1. Admin sube foto ID del empleado y datos base.
-2. Empleado marca asistencia con webcam (foto + video).
-3. API guarda evidencia y referencia la foto de identificación para comparación.
-
-
-## Mejoras UX aplicadas
-- Detección de dispositivo: en móvil se activa configuración automática para modo **táctil**.
-- Identificación flexible: el terminal acepta **ID empleado o nombre completo** para buscar y comparar.
-- Flujo optimizado y separado por pasos con navbar de seguimiento e iconos.
-
-## Búsqueda y comparación
-`POST /api/attendance/scan` ahora acepta:
-- `employeeCode` **o** `employeeIdentity`
-- La API compara `employee_code` o `full_name` (case-insensitive) para encontrar al empleado.
+- Mover credenciales admin del frontend al backend con JWT/sesiones.
+- Reemplazar captcha mock por proveedor real (Cloudflare Turnstile / reCAPTCHA).
+- Hashear contraseñas en backend (bcrypt/argon2).
+- Agregar auditoría de accesos admin y rate limiting.
+- Incorporar migraciones versionadas (Prisma/Knex/Flyway).

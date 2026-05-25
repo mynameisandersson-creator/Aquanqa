@@ -97,6 +97,8 @@ function AdminPanel() {
   const [idPhoto, setIdPhoto] = useState(null)
   const [employees, setEmployees] = useState([])
   const [attendanceRows, setAttendanceRows] = useState([])
+  const [showEmployeesModal, setShowEmployeesModal] = useState(false)
+  const [showAttendanceModal, setShowAttendanceModal] = useState(false)
 
   const captchaImage = `https://dummyimage.com/180x60/0b1630/8bc4ff&text=${captchaText}`
 
@@ -128,35 +130,37 @@ function AdminPanel() {
     <div className="rounded-xl bg-slate-800/70 p-3 space-y-2"><div className="text-cold-300 text-sm">Registrar empleado + foto ID</div><input className="w-full h-10 rounded-lg bg-slate-900 px-2" placeholder="userId" onChange={(e)=>setEmp({...emp,userId:e.target.value})}/><input className="w-full h-10 rounded-lg bg-slate-900 px-2" placeholder="employeeCode" onChange={(e)=>setEmp({...emp,employeeCode:e.target.value})}/><input className="w-full h-10 rounded-lg bg-slate-900 px-2" placeholder="nombre completo" onChange={(e)=>setEmp({...emp,fullName:e.target.value})}/><input className="w-full h-10 rounded-lg bg-slate-900 px-2" placeholder="área" onChange={(e)=>setEmp({...emp,area:e.target.value})}/><input type="file" accept="image/*" onChange={(e)=>setIdPhoto(e.target.files?.[0]||null)} className="w-full text-sm"/><button className="w-full h-11 rounded-lg bg-emerald-600" onClick={createEmployee}>🆔 Guardar empleado</button></div>
 
     <div className="grid grid-cols-2 gap-2">
-      <button className="h-11 rounded-lg bg-indigo-600" onClick={loadEmployees}>📋 Ver tabla empleados</button>
-      <button className="h-11 rounded-lg bg-cold-500" onClick={loadAttendance}>🕒 Ver asistencias</button>
+      <button className="h-11 rounded-lg bg-indigo-600" onClick={async ()=>{await loadEmployees(); setShowEmployeesModal(true)}}>📋 Ver tabla empleados</button>
+      <button className="h-11 rounded-lg bg-cold-500" onClick={async ()=>{await loadAttendance(); setShowAttendanceModal(true)}}>🕒 Ver asistencias</button>
     </div>
 
-    <div className="rounded-xl bg-slate-900/60 p-2 text-xs max-h-52 overflow-auto">
-      <div className="mb-2 font-semibold">Tabla visual de empleados</div>
-      <table className="w-full text-left">
-        <thead><tr className="text-cold-300"><th>ID</th><th>Código</th><th>Nombre</th><th>Área</th></tr></thead>
-        <tbody>
-          {employees.map((e) => <tr key={e.id} className="border-t border-slate-700"><td>{e.id}</td><td>{e.employee_code}</td><td>{e.full_name}</td><td>{e.area}</td></tr>)}
-        </tbody>
-      </table>
-      {employees.map((e) => e.id_photo_url && <div key={`img-${e.id}`} className="mt-2"><div className="mb-1">Foto ID {e.employee_code}</div><img src={`${API_BASE}${e.id_photo_url}`} alt={e.full_name} className="h-16 rounded" /></div>)}
-    </div>
+    {showEmployeesModal && (
+      <DataModal title="Base de datos empresa · Empleados" onClose={() => setShowEmployeesModal(false)}>
+        <table className="w-full text-left text-xs">
+          <thead><tr className="text-cold-300"><th>ID</th><th>Código</th><th>Nombre</th><th>Área</th></tr></thead>
+          <tbody>{employees.map((e) => <tr key={e.id} className="border-t border-slate-700"><td>{e.id}</td><td>{e.employee_code}</td><td>{e.full_name}</td><td>{e.area}</td></tr>)}</tbody>
+        </table>
+        <div className="mt-3 grid grid-cols-2 gap-2">{employees.map((e) => e.id_photo_url && <div key={`img-${e.id}`} className="text-xs"><div className="mb-1">{e.employee_code}</div><img src={`${API_BASE}${e.id_photo_url}`} alt={e.full_name} className="h-16 rounded" /></div>)}</div>
+      </DataModal>
+    )}
 
-    <div className="rounded-xl bg-slate-900/60 p-2 text-xs max-h-52 overflow-auto">
-      <div className="mb-2 font-semibold">Tabla visual de asistencias</div>
-      <table className="w-full text-left">
-        <thead><tr className="text-cold-300"><th>Hora</th><th>Código</th><th>Nombre</th><th>Método</th></tr></thead>
-        <tbody>
-          {attendanceRows.map((r, i) => <tr key={`${r.id}-${i}`} className="border-t border-slate-700"><td>{new Date(r.scan_time).toLocaleTimeString('es-PE',{hour:'2-digit',minute:'2-digit'})}</td><td>{r.employee_code}</td><td>{r.full_name}</td><td>{r.method}</td></tr>)}
-        </tbody>
-      </table>
-    </div>
+    {showAttendanceModal && (
+      <DataModal title="Base de datos empresa · Asistencias" onClose={() => setShowAttendanceModal(false)}>
+        <table className="w-full text-left text-xs">
+          <thead><tr className="text-cold-300"><th>Hora</th><th>Código</th><th>Nombre</th><th>Método</th></tr></thead>
+          <tbody>{attendanceRows.map((r, i) => <tr key={`${r.id}-${i}`} className="border-t border-slate-700"><td>{new Date(r.scan_time).toLocaleTimeString('es-PE',{hour:'2-digit',minute:'2-digit'})}</td><td>{r.employee_code}</td><td>{r.full_name}</td><td>{r.method}</td></tr>)}</tbody>
+        </table>
+      </DataModal>
+    )}
 
     <div className="rounded-xl bg-cold-900/40 p-2 text-sm">{message || 'Sin operaciones aún.'}</div>
   </div>
 }
 
+
+function DataModal({ title, onClose, children }) {
+  return <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4"><div className="w-full max-w-[720px] max-h-[80vh] overflow-auto rounded-2xl bg-slate-900 border border-cold-300/30 p-4"><div className="flex items-center justify-between mb-3"><h3 className="text-cold-300 font-semibold">{title}</h3><button className="px-3 py-1 rounded bg-slate-700" onClick={onClose}>Cerrar</button></div>{children}</div></div>
+}
 
 function ScanScreen({ status, statusClass, method, setMethod, employeeIdentity, setEmployeeIdentity, onDetect, setStatus }) {
   const videoRef = useRef(null); const streamRef = useRef(null)
