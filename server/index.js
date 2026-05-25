@@ -92,9 +92,15 @@ app.get('/api/admin/employees', requireAdmin, async (_, res) => {
   return res.json({ ok: true, data })
 })
 
+
+app.get('/api/admin/photo-rules', async (_, res) => {
+  const rules = await query('SELECT * FROM photo_rules WHERE active = 1 ORDER BY id DESC')
+  return res.json({ ok: true, data: rules })
+})
+
 app.post('/api/attendance/scan', upload.fields([{ name: 'faceImage', maxCount: 1 }, { name: 'video', maxCount: 1 }]), async (req, res) => {
   try {
-    const { employeeCode, employeeIdentity, method = 'face', confidence = 97.3, biometricMatch = 'true' } = req.body
+    const { employeeCode, employeeIdentity, method = 'face', confidence = 97.3, biometricMatch = 'true', accessoriesDetected = 'false' } = req.body
     const identity = employeeCode || employeeIdentity
     if (!identity) return res.status(400).json({ ok: false, message: 'employeeCode o employeeIdentity es requerido' })
     if (!['face', 'fingerprint'].includes(method)) return res.status(400).json({ ok: false, message: 'Método inválido' })
@@ -120,17 +126,28 @@ app.post('/api/attendance/scan', upload.fields([{ name: 'faceImage', maxCount: 1
     const faceFile = req.files?.faceImage?.[0]
     const videoFile = req.files?.video?.[0]
 
+    const rules = await query("SELECT id, allow_accessories FROM photo_rules WHERE rule_code = 'DEFAULT_NO_ACCESSORIES' LIMIT 1")
+    const rule = rules[0] || null
+    const accessories = accessoriesDetected === 'true'
+
+    if (rule && !rule.allow_accessories && accessories) {
+      return res.status(422).json({ ok: false, message: 'Regla de foto violada: no se permiten accesorios' })
+    }
+
     await query(
       `INSERT INTO recognition_evidence
-      (attendance_id, reference_id_photo_url, captured_face_url, captured_video_url, comparison_score, biometric_match)
-      VALUES (?, ?, ?, ?, ?, ?)`,
+      (attendance_id, employee_id, rule_id, reference_id_photo_url, captured_face_url, captured_video_url, comparison_score, biometric_match, accessories_detected)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         attendance.id,
+        employee.id,
+        rule ? rule.id : null,
         employee.id_photo_url,
         faceFile ? `/uploads/faces/${faceFile.filename}` : null,
         videoFile ? `/uploads/videos/${videoFile.filename}` : null,
         Number(confidence),
         biometricMatch === 'true',
+        accessories,
       ],
     )
 

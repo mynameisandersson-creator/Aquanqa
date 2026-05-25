@@ -161,3 +161,36 @@ Verificación post deploy:
 - Hashear contraseñas en backend (bcrypt/argon2).
 - Agregar auditoría de accesos admin y rate limiting.
 - Incorporar migraciones versionadas (Prisma/Knex/Flyway).
+
+
+## 12) Módulos biométricos y reglas de foto (MySQL)
+Se implementó soporte en base de datos para control de calidad biométrica:
+
+- Tabla `photo_rules`:
+  - reglas de validación de foto (área de rostro, brillo, blur, accesorios)
+- Tabla `biometric_enrollments`:
+  - enrolamiento facial/táctil con calidad y regla usada
+- Tabla `recognition_evidence` (ampliada):
+  - `employee_id`, `rule_id`, `comparison_score`, `biometric_match`, `accessories_detected`
+
+### Regla por defecto cargada
+- `DEFAULT_NO_ACCESSORIES`: no permite accesorios durante captura.
+
+### Endpoint nuevo
+- `GET /api/admin/photo-rules` -> lista reglas activas de foto.
+
+### Validación en escaneo
+En `POST /api/attendance/scan`:
+- si `accessoriesDetected=true` y la regla no permite accesorios, retorna error `422`.
+
+
+## 13) Inicializar MySQL en Railway
+1. Crear servicio MySQL en Railway y copiar `DATABASE_URL`.
+2. Configurar `DATABASE_URL` en servicio web.
+3. Ejecutar `db/schema.sql` en la consola SQL de Railway (tab Database).
+4. Verificar tablas creadas: `employees`, `photo_rules`, `biometric_enrollments`, `recognition_evidence`, `attendance_records`.
+5. Probar endpoints:
+   - `GET /api/health`
+   - `GET /api/admin/photo-rules`
+   - `POST /api/admin/employees` (con `idPhoto`)
+   - `POST /api/attendance/scan` (con `employeeIdentity` + `faceImage`)
