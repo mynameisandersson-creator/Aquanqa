@@ -4,7 +4,7 @@ import multer from 'multer'
 import path from 'path'
 import fs from 'fs'
 import { fileURLToPath } from 'url'
-import { pool } from './db.js'
+import { query } from './db.js'
 
 const app = express()
 const port = process.env.PORT || 4000
@@ -53,13 +53,12 @@ app.post('/api/admin/users', requireAdmin, async (req, res) => {
   try {
     const { username, fullName, email, passwordHash, role } = req.body
     if (!username || !fullName || !passwordHash || !role) return res.status(400).json({ ok: false, message: 'Faltan campos obligatorios' })
-    const created = await pool.query(
-      `INSERT INTO app_users (username, full_name, email, password_hash, role)
-       VALUES ($1, $2, $3, $4, $5)
-       RETURNING id, username, full_name, email, role, active, created_at`,
+    await query(
+      `INSERT INTO app_users (username, full_name, email, password_hash, role) VALUES (?, ?, ?, ?, ?)`,
       [username, fullName, email || null, passwordHash, role],
     )
-    return res.status(201).json({ ok: true, user: created.rows[0] })
+    const created = await query('SELECT id, username, full_name, email, role, active, created_at FROM app_users WHERE username = ? ORDER BY id DESC LIMIT 1', [username])
+    return res.status(201).json({ ok: true, user: created[0] })
   } catch (error) {
     console.error(error)
     return res.status(500).json({ ok: false, message: 'Error creando usuario' })
@@ -74,15 +73,14 @@ app.post('/api/admin/employees', requireAdmin, upload.single('idPhoto'), async (
     const idPhotoPath = req.file ? `/uploads/ids/${req.file.filename}` : null
     if (!idPhotoPath) return res.status(400).json({ ok: false, message: 'Debe subir foto de identificación' })
 
-    const result = await pool.query(
+    await query(
       `INSERT INTO employees
       (user_id, employee_code, full_name, area, id_photo_url, face_template_hash, fingerprint_template_hash)
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
-      RETURNING *`,
+      VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [userId || null, employeeCode, fullName, area, idPhotoPath, faceTemplateHash || null, fingerprintTemplateHash || null],
     )
-
-    return res.status(201).json({ ok: true, employee: result.rows[0] })
+    const result = await query('SELECT * FROM employees WHERE employee_code = ? ORDER BY id DESC LIMIT 1', [employeeCode])
+    return res.status(201).json({ ok: true, employee: result[0] })
   } catch (error) {
     console.error(error)
     return res.status(500).json({ ok: false, message: 'Error creando empleado' })
@@ -90,8 +88,8 @@ app.post('/api/admin/employees', requireAdmin, upload.single('idPhoto'), async (
 })
 
 app.get('/api/admin/employees', requireAdmin, async (_, res) => {
-  const data = await pool.query('SELECT * FROM employees ORDER BY created_at DESC LIMIT 300')
-  return res.json({ ok: true, data: data.rows })
+  const data = await query('SELECT * FROM employees ORDER BY created_at DESC LIMIT 300')
+  return res.json({ ok: true, data })
 })
 
 app.post('/api/attendance/scan', upload.fields([{ name: 'faceImage', maxCount: 1 }, { name: 'video', maxCount: 1 }]), async (req, res) => {
@@ -101,33 +99,31 @@ app.post('/api/attendance/scan', upload.fields([{ name: 'faceImage', maxCount: 1
     if (!identity) return res.status(400).json({ ok: false, message: 'employeeCode o employeeIdentity es requerido' })
     if (!['face', 'fingerprint'].includes(method)) return res.status(400).json({ ok: false, message: 'Método inválido' })
 
-    const employeeResult = await pool.query(
-      `SELECT id, full_name, area, id_photo_url FROM employees
-       WHERE (employee_code = $1 OR LOWER(full_name) = LOWER($1)) AND active = true
+    const employeeResult = await query(
+      `SELECT id, employee_code, full_name, area, id_photo_url FROM employees
+       WHERE (employee_code = ? OR LOWER(full_name) = LOWER(?)) AND active = true
        LIMIT 1`,
-      [identity],
+      [identity, identity],
     )
 
-    if (!employeeResult.rowCount) return res.status(404).json({ ok: false, message: 'Empleado no encontrado' })
+    if (!employeeResult.length) return res.status(404).json({ ok: false, message: 'Empleado no encontrado' })
 
-    const employee = employeeResult.rows[0]
+    const employee = employeeResult[0]
     const punctuality = new Date().getHours() <= 8 ? 'Puntual' : 'Tardanza'
 
-    const attendanceResult = await pool.query(
-      `INSERT INTO attendance_records (employee_id, punctuality_status, confidence, method)
-       VALUES ($1, $2, $3, $4)
-       RETURNING id, scan_time`,
+    await query(
+      `INSERT INTO attendance_records (employee_id, punctuality_status, confidence, method) VALUES (?, ?, ?, ?)`,
       [employee.id, punctuality, Number(confidence), method],
     )
-
-    const attendance = attendanceResult.rows[0]
+    const attendanceRows = await query('SELECT id, scan_time FROM attendance_records WHERE employee_id = ? ORDER BY id DESC LIMIT 1', [employee.id])
+    const attendance = attendanceRows[0]
     const faceFile = req.files?.faceImage?.[0]
     const videoFile = req.files?.video?.[0]
 
-    await pool.query(
+    await query(
       `INSERT INTO recognition_evidence
       (attendance_id, reference_id_photo_url, captured_face_url, captured_video_url, comparison_score, biometric_match)
-      VALUES ($1, $2, $3, $4, $5, $6)`,
+      VALUES (?, ?, ?, ?, ?, ?)`,
       [
         attendance.id,
         employee.id_photo_url,
@@ -146,8 +142,8 @@ app.post('/api/attendance/scan', upload.fields([{ name: 'faceImage', maxCount: 1
 })
 
 app.get('/api/reports/attendance', async (_, res) => {
-  const data = await pool.query('SELECT * FROM attendance_report ORDER BY scan_time DESC LIMIT 200')
-  return res.json({ ok: true, data: data.rows })
+  const data = await query('SELECT * FROM attendance_report ORDER BY scan_time DESC LIMIT 200')
+  return res.json({ ok: true, data })
 })
 
 const hasDist = fs.existsSync(path.join(distDir, 'index.html'))

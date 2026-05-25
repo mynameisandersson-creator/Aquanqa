@@ -1,61 +1,66 @@
 CREATE TABLE IF NOT EXISTS app_users (
-  id BIGSERIAL PRIMARY KEY,
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
   username VARCHAR(60) UNIQUE NOT NULL,
   full_name VARCHAR(120) NOT NULL,
   email VARCHAR(140) UNIQUE,
   password_hash TEXT NOT NULL,
-  role VARCHAR(20) NOT NULL CHECK (role IN ('admin', 'employee')),
-  active BOOLEAN NOT NULL DEFAULT TRUE,
-  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+  role ENUM('admin', 'employee') NOT NULL,
+  active TINYINT(1) NOT NULL DEFAULT 1,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS employees (
-  id SERIAL PRIMARY KEY,
-  user_id BIGINT REFERENCES app_users(id),
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id BIGINT,
   employee_code VARCHAR(30) UNIQUE NOT NULL,
   full_name VARCHAR(120) NOT NULL,
   area VARCHAR(40) NOT NULL,
   id_photo_url TEXT NOT NULL,
   face_template_hash TEXT,
   fingerprint_template_hash TEXT,
-  active BOOLEAN DEFAULT TRUE,
-  created_at TIMESTAMP DEFAULT NOW()
+  active TINYINT(1) DEFAULT 1,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_employee_user FOREIGN KEY (user_id) REFERENCES app_users(id)
 );
 
 CREATE TABLE IF NOT EXISTS attendance_records (
-  id BIGSERIAL PRIMARY KEY,
-  employee_id INTEGER NOT NULL REFERENCES employees(id),
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  employee_id INT NOT NULL,
   check_type VARCHAR(20) NOT NULL DEFAULT 'entry',
   punctuality_status VARCHAR(20) NOT NULL,
-  confidence NUMERIC(5,2) NOT NULL,
+  confidence DECIMAL(5,2) NOT NULL,
   method VARCHAR(20) NOT NULL,
-  scan_time TIMESTAMP NOT NULL DEFAULT NOW(),
-  terminal_name VARCHAR(50) DEFAULT 'AQUANQA-MOBILE-01'
+  scan_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  terminal_name VARCHAR(50) DEFAULT 'AQUANQA-MOBILE-01',
+  CONSTRAINT fk_attendance_employee FOREIGN KEY (employee_id) REFERENCES employees(id)
 );
 
 CREATE TABLE IF NOT EXISTS recognition_evidence (
-  id BIGSERIAL PRIMARY KEY,
-  attendance_id BIGINT NOT NULL REFERENCES attendance_records(id),
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  attendance_id BIGINT NOT NULL,
   reference_id_photo_url TEXT,
   captured_face_url TEXT,
   captured_video_url TEXT,
-  comparison_score NUMERIC(5,2),
-  biometric_match BOOLEAN,
-  created_at TIMESTAMP DEFAULT NOW()
+  comparison_score DECIMAL(5,2),
+  biometric_match TINYINT(1),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_evidence_attendance FOREIGN KEY (attendance_id) REFERENCES attendance_records(id)
 );
 
 CREATE TABLE IF NOT EXISTS biometric_enrollments (
-  id BIGSERIAL PRIMARY KEY,
-  employee_id INTEGER NOT NULL REFERENCES employees(id),
-  enrollment_type VARCHAR(20) NOT NULL CHECK (enrollment_type IN ('face', 'fingerprint')),
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  employee_id INT NOT NULL,
+  enrollment_type ENUM('face', 'fingerprint') NOT NULL,
   template_hash TEXT,
   source_photo_url TEXT,
-  enrolled_by BIGINT REFERENCES app_users(id),
-  enrolled_at TIMESTAMP NOT NULL DEFAULT NOW(),
-  active BOOLEAN NOT NULL DEFAULT TRUE
+  enrolled_by BIGINT,
+  enrolled_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  active TINYINT(1) NOT NULL DEFAULT 1,
+  CONSTRAINT fk_enroll_employee FOREIGN KEY (employee_id) REFERENCES employees(id),
+  CONSTRAINT fk_enroll_user FOREIGN KEY (enrolled_by) REFERENCES app_users(id)
 );
 
-CREATE VIEW IF NOT EXISTS attendance_report AS
+CREATE OR REPLACE VIEW attendance_report AS
 SELECT
   ar.id,
   ar.scan_time,
