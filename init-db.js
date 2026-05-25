@@ -7,12 +7,17 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 async function initDatabase() {
+  const connectionUri = process.env.DATABASE_URL || process.env.MYSQL_URL
+
+  if (!connectionUri) {
+    console.error('✖ No se encontró DATABASE_URL ni MYSQL_URL en las variables de entorno.')
+    process.exit(1)
+  }
+
+  console.log('→ Conectando a MySQL usando DATABASE_URL...')
+
   const connection = await mysql.createConnection({
-    host: process.env.MYSQLHOST,
-    user: process.env.MYSQLUSER,
-    password: process.env.MYSQLPASSWORD,
-    database: process.env.MYSQLDATABASE,
-    port: Number(process.env.MYSQLPORT) || 3306,
+    uri: connectionUri,
     multipleStatements: true,
   })
 
@@ -31,12 +36,13 @@ async function initDatabase() {
   for (const statement of statements) {
     try {
       await connection.execute(statement)
+      console.log(`  ✔ OK: ${statement.split('\n')[0].slice(0, 60)}`)
     } catch (err) {
       // ER_TABLE_EXISTS_ERROR, ER_DUP_KEYNAME, etc. — safe to ignore
       if (err.code && (err.code.startsWith('ER_TABLE_EXISTS') || err.code === 'ER_DUP_KEYNAME')) {
-        console.warn(`⚠ Ignorado (ya existe): ${err.code}`)
+        console.warn(`  ⚠ Ignorado (ya existe): ${err.code}`)
       } else {
-        console.error(`✖ Error ejecutando sentencia:\n${statement}\n`, err.message)
+        console.error(`  ✖ Error ejecutando sentencia:\n${statement}\n`, err.message)
         // Non-fatal: log and continue so remaining statements still run
       }
     }
@@ -46,7 +52,11 @@ async function initDatabase() {
   console.log('✔ Schema aplicado correctamente. Base de datos lista.')
 }
 
-initDatabase().catch((err) => {
-  console.error('✖ Error fatal al inicializar la base de datos:', err.message)
-  process.exit(1)
-})
+initDatabase()
+  .then(() => {
+    process.exit(0)
+  })
+  .catch((err) => {
+    console.error('✖ Error fatal al inicializar la base de datos:', err.message)
+    process.exit(1)
+  })
