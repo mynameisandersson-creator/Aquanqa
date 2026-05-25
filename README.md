@@ -121,3 +121,14 @@ Usar header: `x-user-role: admin`
 1. Admin sube foto ID del empleado y datos base.
 2. Empleado marca asistencia con webcam (foto + video).
 3. API guarda evidencia y referencia la foto de identificación para comparación.
+
+
+## Mejoras UX aplicadas
+- Detección de dispositivo: en móvil se activa configuración automática para modo **táctil**.
+- Identificación flexible: el terminal acepta **ID empleado o nombre completo** para buscar y comparar.
+- Flujo optimizado y separado por pasos con navbar de seguimiento e iconos.
+
+## Búsqueda y comparación
+`POST /api/attendance/scan` ahora acepta:
+- `employeeCode` **o** `employeeIdentity`
+- La API compara `employee_code` o `full_name` (case-insensitive) para encontrar al empleado.

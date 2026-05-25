@@ -96,13 +96,16 @@ app.get('/api/admin/employees', requireAdmin, async (_, res) => {
 
 app.post('/api/attendance/scan', upload.fields([{ name: 'faceImage', maxCount: 1 }, { name: 'video', maxCount: 1 }]), async (req, res) => {
   try {
-    const { employeeCode, method = 'face', confidence = 97.3, biometricMatch = 'true' } = req.body
-    if (!employeeCode) return res.status(400).json({ ok: false, message: 'employeeCode es requerido' })
+    const { employeeCode, employeeIdentity, method = 'face', confidence = 97.3, biometricMatch = 'true' } = req.body
+    const identity = employeeCode || employeeIdentity
+    if (!identity) return res.status(400).json({ ok: false, message: 'employeeCode o employeeIdentity es requerido' })
     if (!['face', 'fingerprint'].includes(method)) return res.status(400).json({ ok: false, message: 'Método inválido' })
 
     const employeeResult = await pool.query(
-      'SELECT id, full_name, area, id_photo_url FROM employees WHERE employee_code = $1 AND active = true LIMIT 1',
-      [employeeCode],
+      `SELECT id, full_name, area, id_photo_url FROM employees
+       WHERE (employee_code = $1 OR LOWER(full_name) = LOWER($1)) AND active = true
+       LIMIT 1`,
+      [identity],
     )
 
     if (!employeeResult.rowCount) return res.status(404).json({ ok: false, message: 'Empleado no encontrado' })
