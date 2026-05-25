@@ -86,27 +86,26 @@ function AttendancePanel() {
 }
 
 function AdminPanel() {
+  const ADMIN_USER = 'admin.aquanqa'
+  const ADMIN_PASS = 'Aquanqa@2026!'
   const [isAuth, setIsAuth] = useState(false)
   const [cred, setCred] = useState({ username: '', password: '' })
-  const [captchaA] = useState(() => Math.floor(Math.random() * 8) + 1)
-  const [captchaB] = useState(() => Math.floor(Math.random() * 8) + 1)
+  const [captchaText] = useState(() => Math.random().toString(36).slice(2, 7).toUpperCase())
   const [captcha, setCaptcha] = useState('')
   const [message, setMessage] = useState('')
-  const [form, setForm] = useState({ username: '', fullName: '', email: '', passwordHash: '', role: 'employee' })
   const [emp, setEmp] = useState({ userId: '', employeeCode: '', fullName: '', area: 'Frío' })
   const [idPhoto, setIdPhoto] = useState(null)
   const [employees, setEmployees] = useState([])
+  const [attendanceRows, setAttendanceRows] = useState([])
+
+  const captchaImage = `https://dummyimage.com/180x60/0b1630/8bc4ff&text=${captchaText}`
 
   const loginAdmin = () => {
-    if (!cred.username || !cred.password) return setMessage('Ingrese credenciales de administrador')
-    if (Number(captcha) !== captchaA + captchaB) return setMessage('Captcha incorrecto')
+    if (cred.username !== ADMIN_USER || cred.password !== ADMIN_PASS) return setMessage('Credenciales admin inválidas')
+    if (captcha.trim().toUpperCase() !== captchaText) return setMessage('Captcha incorrecto')
     setIsAuth(true); setMessage('Autenticación administrativa correcta')
   }
 
-  const createUser = async () => {
-    const r = await fetch(`${API_BASE}/api/admin/users`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-user-role': 'admin' }, body: JSON.stringify(form) })
-    const d = await r.json(); setMessage(d.ok ? `Usuario creado: ${d.user.username}` : d.message)
-  }
   const createEmployee = async () => {
     const fd = new FormData(); Object.entries(emp).forEach(([k,v]) => fd.append(k, v)); if (idPhoto) fd.append('idPhoto', idPhoto)
     const r = await fetch(`${API_BASE}/api/admin/employees`, { method: 'POST', headers: { 'x-user-role': 'admin' }, body: fd })
@@ -117,20 +116,47 @@ function AdminPanel() {
     const d = await r.json(); setEmployees(d.data || [])
   }
 
-  if (!isAuth) return <div className="space-y-2 rounded-xl bg-slate-800/70 p-3"><div className="text-cold-300">🔐 Login Admin + Captcha</div><input className="w-full h-10 rounded-lg bg-slate-900 px-2" placeholder="usuario admin" onChange={(e)=>setCred({...cred,username:e.target.value})}/><input type="password" className="w-full h-10 rounded-lg bg-slate-900 px-2" placeholder="contraseña" onChange={(e)=>setCred({...cred,password:e.target.value})}/><div className="text-sm">Captcha: {captchaA} + {captchaB} = ?</div><input className="w-full h-10 rounded-lg bg-slate-900 px-2" placeholder="resultado captcha" onChange={(e)=>setCaptcha(e.target.value)}/><button className="w-full h-11 rounded-lg bg-cold-500" onClick={loginAdmin}>Ingresar al panel</button><div className="text-sm">{message}</div></div>
+  if (!isAuth) return <div className="space-y-2 rounded-xl bg-slate-800/70 p-3"><div className="text-cold-300">🔐 Login Admin + Captcha imagen</div><div className="text-xs bg-cold-900/50 p-2 rounded">Credenciales predefinidas:<br/>Usuario: <b>{ADMIN_USER}</b><br/>Clave: <b>{ADMIN_PASS}</b></div><input className="w-full h-10 rounded-lg bg-slate-900 px-2" placeholder="usuario admin" onChange={(e)=>setCred({...cred,username:e.target.value})}/><input type="password" className="w-full h-10 rounded-lg bg-slate-900 px-2" placeholder="contraseña" onChange={(e)=>setCred({...cred,password:e.target.value})}/><img src={captchaImage} alt="captcha" className="rounded border border-cold-300/30"/><input className="w-full h-10 rounded-lg bg-slate-900 px-2" placeholder="escriba captcha" onChange={(e)=>setCaptcha(e.target.value)}/><button className="w-full h-11 rounded-lg bg-cold-500" onClick={loginAdmin}>Ingresar al panel</button><div className="text-sm">{message}</div></div>
+
+  const loadAttendance = async () => {
+    const r = await fetch(`${API_BASE}/api/reports/attendance`)
+    const d = await r.json(); setAttendanceRows(d.data || [])
+  }
 
   return <div className="space-y-3">
     <div className="rounded-xl bg-cold-900/40 p-3 text-sm">🛠 Panel administrativo autenticado</div>
-    <div className="rounded-xl bg-slate-800/70 p-3 space-y-2"><div className="text-cold-300 text-sm">Crear usuario</div><input className="w-full h-10 rounded-lg bg-slate-900 px-2" placeholder="username" onChange={(e)=>setForm({...form,username:e.target.value})}/><input className="w-full h-10 rounded-lg bg-slate-900 px-2" placeholder="nombre completo" onChange={(e)=>setForm({...form,fullName:e.target.value})}/><input className="w-full h-10 rounded-lg bg-slate-900 px-2" placeholder="email" onChange={(e)=>setForm({...form,email:e.target.value})}/><input className="w-full h-10 rounded-lg bg-slate-900 px-2" placeholder="password_hash" onChange={(e)=>setForm({...form,passwordHash:e.target.value})}/><button className="w-full h-11 rounded-lg bg-cold-500" onClick={createUser}>➕ Guardar usuario</button></div>
-    <div className="rounded-xl bg-slate-800/70 p-3 space-y-2"><div className="text-cold-300 text-sm">Crear empleado + foto ID</div><input className="w-full h-10 rounded-lg bg-slate-900 px-2" placeholder="userId" onChange={(e)=>setEmp({...emp,userId:e.target.value})}/><input className="w-full h-10 rounded-lg bg-slate-900 px-2" placeholder="employeeCode" onChange={(e)=>setEmp({...emp,employeeCode:e.target.value})}/><input className="w-full h-10 rounded-lg bg-slate-900 px-2" placeholder="nombre completo" onChange={(e)=>setEmp({...emp,fullName:e.target.value})}/><input className="w-full h-10 rounded-lg bg-slate-900 px-2" placeholder="área" onChange={(e)=>setEmp({...emp,area:e.target.value})}/><input type="file" accept="image/*" onChange={(e)=>setIdPhoto(e.target.files?.[0]||null)} className="w-full text-sm"/><button className="w-full h-11 rounded-lg bg-emerald-600" onClick={createEmployee}>🆔 Guardar empleado</button></div>
-    <button className="w-full h-11 rounded-lg bg-indigo-600" onClick={loadEmployees}>📋 Ver tabla empleados</button>
-    <div className="rounded-xl bg-slate-900/60 p-2 text-xs max-h-52 overflow-auto">
-      <div className="mb-2">Formato tabla/texto:</div>
-      {employees.map((e) => <div key={e.id} className="mb-2 border-b border-slate-700 pb-2"><div>ID:{e.id} | Código:{e.employee_code} | Nombre:{e.full_name} | Área:{e.area}</div><div>Foto ID: {e.id_photo_url}</div>{e.id_photo_url && <img src={`${API_BASE}${e.id_photo_url}`} alt={e.full_name} className="mt-1 h-16 rounded" />}</div>)}
+    <div className="rounded-xl bg-slate-800/70 p-3 space-y-2"><div className="text-cold-300 text-sm">Registrar empleado + foto ID</div><input className="w-full h-10 rounded-lg bg-slate-900 px-2" placeholder="userId" onChange={(e)=>setEmp({...emp,userId:e.target.value})}/><input className="w-full h-10 rounded-lg bg-slate-900 px-2" placeholder="employeeCode" onChange={(e)=>setEmp({...emp,employeeCode:e.target.value})}/><input className="w-full h-10 rounded-lg bg-slate-900 px-2" placeholder="nombre completo" onChange={(e)=>setEmp({...emp,fullName:e.target.value})}/><input className="w-full h-10 rounded-lg bg-slate-900 px-2" placeholder="área" onChange={(e)=>setEmp({...emp,area:e.target.value})}/><input type="file" accept="image/*" onChange={(e)=>setIdPhoto(e.target.files?.[0]||null)} className="w-full text-sm"/><button className="w-full h-11 rounded-lg bg-emerald-600" onClick={createEmployee}>🆔 Guardar empleado</button></div>
+
+    <div className="grid grid-cols-2 gap-2">
+      <button className="h-11 rounded-lg bg-indigo-600" onClick={loadEmployees}>📋 Ver tabla empleados</button>
+      <button className="h-11 rounded-lg bg-cold-500" onClick={loadAttendance}>🕒 Ver asistencias</button>
     </div>
+
+    <div className="rounded-xl bg-slate-900/60 p-2 text-xs max-h-52 overflow-auto">
+      <div className="mb-2 font-semibold">Tabla visual de empleados</div>
+      <table className="w-full text-left">
+        <thead><tr className="text-cold-300"><th>ID</th><th>Código</th><th>Nombre</th><th>Área</th></tr></thead>
+        <tbody>
+          {employees.map((e) => <tr key={e.id} className="border-t border-slate-700"><td>{e.id}</td><td>{e.employee_code}</td><td>{e.full_name}</td><td>{e.area}</td></tr>)}
+        </tbody>
+      </table>
+      {employees.map((e) => e.id_photo_url && <div key={`img-${e.id}`} className="mt-2"><div className="mb-1">Foto ID {e.employee_code}</div><img src={`${API_BASE}${e.id_photo_url}`} alt={e.full_name} className="h-16 rounded" /></div>)}
+    </div>
+
+    <div className="rounded-xl bg-slate-900/60 p-2 text-xs max-h-52 overflow-auto">
+      <div className="mb-2 font-semibold">Tabla visual de asistencias</div>
+      <table className="w-full text-left">
+        <thead><tr className="text-cold-300"><th>Hora</th><th>Código</th><th>Nombre</th><th>Método</th></tr></thead>
+        <tbody>
+          {attendanceRows.map((r, i) => <tr key={`${r.id}-${i}`} className="border-t border-slate-700"><td>{new Date(r.scan_time).toLocaleTimeString('es-PE',{hour:'2-digit',minute:'2-digit'})}</td><td>{r.employee_code}</td><td>{r.full_name}</td><td>{r.method}</td></tr>)}
+        </tbody>
+      </table>
+    </div>
+
     <div className="rounded-xl bg-cold-900/40 p-2 text-sm">{message || 'Sin operaciones aún.'}</div>
   </div>
 }
+
 
 function ScanScreen({ status, statusClass, method, setMethod, employeeIdentity, setEmployeeIdentity, onDetect, setStatus }) {
   const videoRef = useRef(null); const streamRef = useRef(null)
